@@ -50,7 +50,7 @@ function showMainMenu() {
   alarms.forEach((e, index) => {
     var label = e.timer
       ? require("time_utils").formatDuration(e.timer)
-      : require("time_utils").formatTime(e.t) + (e.rp ? ` ${decodeDOW(e)}` : "");
+      : (e.date ? `${e.date.substring(5,10)} ${require("time_utils").formatTime(e.t)}` : require("time_utils").formatTime(e.t) + (e.rp ? ` ${decodeDOW(e)}` : "")) + (e.msg ? " " + e.msg : "");
     menu[label] = {
       value: e.on ? (e.timer ? iconTimerOn : iconAlarmOn) : (e.timer ? iconTimerOff : iconAlarmOff),
       onchange: () => setTimeout(e.timer ? showEditTimerMenu : showEditAlarmMenu, 10, e, index)
@@ -67,11 +67,12 @@ function showNewMenu() {
     "": { "title": /*LANG*/"New..." },
     "< Back": () => showMainMenu(),
     /*LANG*/"Alarm": () => showEditAlarmMenu(undefined, undefined),
-    /*LANG*/"Timer": () => showEditTimerMenu(undefined, undefined)
+    /*LANG*/"Timer": () => showEditTimerMenu(undefined, undefined),
+    /*LANG*/"Dated Event": () => showEditAlarmMenu(undefined, undefined, true)
   });
 }
 
-function showEditAlarmMenu(selectedAlarm, alarmIndex) {
+function showEditAlarmMenu(selectedAlarm, alarmIndex, withDate) {
   var isNew = alarmIndex === undefined;
 
   var alarm = require("sched").newDefaultAlarm();
@@ -82,11 +83,12 @@ function showEditAlarmMenu(selectedAlarm, alarmIndex) {
   }
 
   var time = require("time_utils").decodeTime(alarm.t);
+  var date = alarm.date ? new Date(alarm.date) : (withDate ? new Date() : undefined);
 
   const menu = {
     "": { "title": isNew ? /*LANG*/"New Alarm" : /*LANG*/"Edit Alarm" },
     "< Back": () => {
-      prepareAlarmForSave(alarm, alarmIndex, time);
+      prepareAlarmForSave(alarm, alarmIndex, time, date);
       saveAndReload();
       showMainMenu();
     },
@@ -106,6 +108,38 @@ function showEditAlarmMenu(selectedAlarm, alarmIndex) {
       wrap: true,
       onchange: v => time.m = v
     },
+    /*LANG*/"Day": {
+      value: date ? date.getDate() : null,
+      min: 1,
+      max: 31,
+      wrap: true,
+      onchange: v => date.setDate(v)
+    },
+    /*LANG*/"Month": {
+      value: date ? date.getMonth() + 1 : null,
+      format: v => require("date_utils").month(v),
+      onchange: v => date.setMonth((v+11)%12)
+    },
+    /*LANG*/"Year": {
+      value: date ? date.getFullYear() : null,
+      min: new Date().getFullYear(),
+      max: 2100,
+      onchange: v => date.setFullYear(v)
+    },
+    /*LANG*/"Message": {
+      value: alarm.msg,
+      onchange: () => {
+        setTimeout(() => {
+          require("textinput").input({text:alarm.msg}).then(result => {
+            if (!!result) {
+              alarm.msg = result;
+            }
+            prepareAlarmForSave(alarm, alarmIndex, time, date, true);
+            setTimeout(showEditAlarmMenu, 10, alarm, alarmIndex, withDate);
+          });
+        }, 100);
+      }
+    },
     /*LANG*/"Enabled": {
       value: alarm.on,
       onchange: v => alarm.on = v
@@ -115,8 +149,8 @@ function showEditAlarmMenu(selectedAlarm, alarmIndex) {
       onchange: () => setTimeout(showEditRepeatMenu, 100, alarm.rp, alarm.dow, (repeat, dow) => {
         alarm.rp = repeat;
         alarm.dow = dow;
-        alarm.t = require("time_utils").encodeTime(time);
-        setTimeout(showEditAlarmMenu, 10, alarm, alarmIndex);
+        prepareAlarmForSave(alarm, alarmIndex, time, date, true);
+        setTimeout(showEditAlarmMenu, 10, alarm, alarmIndex, withDate);
       })
     },
     /*LANG*/"Vibrate": require("buzz_menu").pattern(alarm.vibrate, v => alarm.vibrate = v),
@@ -131,6 +165,14 @@ function showEditAlarmMenu(selectedAlarm, alarmIndex) {
     /*LANG*/"Cancel": () => showMainMenu()
   };
 
+  if(alarm.date || withDate) {
+    delete menu[/*LANG*/"Repeat"];
+  } else {
+    delete menu[/*LANG*/"Day"];
+    delete menu[/*LANG*/"Month"];
+    delete menu[/*LANG*/"Year"];
+  }
+
   if (!isNew) {
     menu[/*LANG*/"Delete"] = () => {
       E.showPrompt(/*LANG*/"Are you sure?", { title: /*LANG*/"Delete Alarm" }).then((confirm) => {
@@ -140,7 +182,7 @@ function showEditAlarmMenu(selectedAlarm, alarmIndex) {
           showMainMenu();
         } else {
           alarm.t = require("time_utils").encodeTime(time);
-          setTimeout(showEditAlarmMenu, 10, alarm, alarmIndex);
+          setTimeout(showEditAlarmMenu, 10, alarm, alarmIndex, withDate);
         }
       });
     };
@@ -149,14 +191,17 @@ function showEditAlarmMenu(selectedAlarm, alarmIndex) {
   E.showMenu(menu);
 }
 
-function prepareAlarmForSave(alarm, alarmIndex, time) {
+function prepareAlarmForSave(alarm, alarmIndex, time, date, temp) {
   alarm.t = require("time_utils").encodeTime(time);
   alarm.last = alarm.t < require("time_utils").getCurrentTimeMillis() ? new Date().getDate() : 0;
+  if(date) alarm.date = new Date(date - (date.getTimezoneOffset() * 60000)).toISOString().slice(0,10);
 
-  if (alarmIndex === undefined) {
-    alarms.push(alarm);
-  } else {
-    alarms[alarmIndex] = alarm;
+  if(!temp) {
+    if (alarmIndex === undefined) {
+      alarms.push(alarm);
+    } else {
+      alarms[alarmIndex] = alarm;
+    }
   }
 }
 
