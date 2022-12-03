@@ -84,9 +84,12 @@ function showEditAlarmMenu(selectedAlarm, alarmIndex, withDate) {
 
   var time = require("time_utils").decodeTime(alarm.t);
   var date = alarm.date ? new Date(alarm.date) : (withDate ? new Date() : undefined);
+  var title = date ? (isNew ? /*LANG*/"New Dated Event" : /*LANG*/"Edit Dated Event") : (isNew ? /*LANG*/"New Alarm" : /*LANG*/"Edit Alarm");
+  var keyboard = "textinput";
+  try {keyboard = require(keyboard);} catch(e) {keyboard = null;}
 
   const menu = {
-    "": { "title": isNew ? /*LANG*/"New Alarm" : /*LANG*/"Edit Alarm" },
+    "": { "title": title },
     "< Back": () => {
       prepareAlarmForSave(alarm, alarmIndex, time, date);
       saveAndReload();
@@ -130,7 +133,7 @@ function showEditAlarmMenu(selectedAlarm, alarmIndex, withDate) {
       value: alarm.msg,
       onchange: () => {
         setTimeout(() => {
-          require("textinput").input({text:alarm.msg}).then(result => {
+          keyboard.input({text:alarm.msg}).then(result => {
             if (!!result) {
               alarm.msg = result;
             }
@@ -165,6 +168,7 @@ function showEditAlarmMenu(selectedAlarm, alarmIndex, withDate) {
     /*LANG*/"Cancel": () => showMainMenu()
   };
 
+  if(!keyboard) delete menu[/*LANG*/"Message"];
   if(alarm.date || withDate) {
     delete menu[/*LANG*/"Repeat"];
   } else {
@@ -194,8 +198,8 @@ function showEditAlarmMenu(selectedAlarm, alarmIndex, withDate) {
 function prepareAlarmForSave(alarm, alarmIndex, time, date, temp) {
   alarm.t = require("time_utils").encodeTime(time);
   alarm.last = alarm.t < require("time_utils").getCurrentTimeMillis() ? new Date().getDate() : 0;
-  if(date) alarm.date = new Date(date - (date.getTimezoneOffset() * 60000)).toISOString().slice(0,10);
-
+  if(date) alarm.date = date.toLocalISOString().slice(0,10);
+  
   if(!temp) {
     if (alarmIndex === undefined) {
       alarms.push(alarm);
