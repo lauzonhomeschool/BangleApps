@@ -1,7 +1,7 @@
 exports.input = function(options) {
   options = options||{};
   var selectedDate;
-  if (options.datetime instanceof Date) {
+  if (options.datetime && options.datetime.getTime) {
     selectedDate = new Date(options.datetime.getTime());
   } else {
     selectedDate = new Date();
